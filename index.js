@@ -92,24 +92,24 @@ function startServer() {
   const app = express();
   const port = process.env.PORT || 3000;
 
-  // --- CORRECTION START: Dynamic CORS for Production/Render ---
+  // 1. BODY PARSERS FIRST (CRITICAL: Needs to run before CORS)
+  app.use(bodyParser.json());
+  app.use(express.json());
+
+  // Define allowed origins for both Express and Socket.IO
   const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:3000",
     process.env.CORS_ORIGIN, // This is your Amplify domain on Render
     "https://codetrack-backend-aws.onrender.com" // Allows direct testing of the API
-  ].filter(Boolean); // Filters out any undefined or empty strings
+  ].filter(Boolean);
 
+  // 2. CORS MIDDLEWARE SECOND (CRITICAL: After parsers, handles the OPTIONS request)
   app.use(cors({
-    // CORRECTION: Use the dynamic list to allow the deployed frontend domain
     origin: allowedOrigins,
     credentials: true,
     optionsSuccessStatus: 200 // Ensures preflight requests pass
   }));
-  // --- CORRECTION END ---
-
-  app.use(bodyParser.json());
-  app.use(express.json());
 
   const mongoURI = process.env.MONGODB_URI;
 
@@ -125,7 +125,7 @@ function startServer() {
   const httpServer = http.createServer(app);
   const io = new Server(httpServer, {
     cors: {
-      // CORRECTION: Socket.IO also needs to allow the Amplify origin
+      // Use the consistent list for Socket.IO as well
       origin: allowedOrigins,
       methods: ["GET", "POST"],
     },
