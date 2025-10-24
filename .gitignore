@@ -1,10 +1,6 @@
 # Ignore node modules
 node_modules/
 
-# Ignore config and secrets
-config/aws-config.js
-config.json
-
 # Ignore logs
 *.log
 
