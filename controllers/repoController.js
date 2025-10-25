@@ -22,7 +22,14 @@ async function createRepository(req, res) {
     const newRepository = new Repository({ name, description: description || "", visibility: visibility !== undefined ? visibility : true, owner });
     const savedRepository = await newRepository.save();
     ownerUser.repositories.push(savedRepository._id);
-    await ownerUser.save();
+    // 2. Atomically update the user document with the new repo ID
+    // This replaces `ownerUser.repositories.push(...)` and `await ownerUser.save()`
+    // This is safer and avoids the crash.
+    await User.findByIdAndUpdate(
+      owner,
+      { $push: { repositories: savedRepository._id } }
+    );
+    // --- FIX END ---
     console.log(`Repository ${savedRepository.name} added to user ${ownerUser.username}`);
     res.status(201).json({ message: "Repository created successfully!", repositoryID: savedRepository._id });
   } catch (err) {
