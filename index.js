@@ -6,7 +6,7 @@ const bodyParser = require("body-parser");
 const http = require("http");
 const { Server } = require("socket.io");
 
-// FIX 1: Import the main router instead of individual routers
+// Import the main router
 const mainRouter = require("./routes/main.router");
 
 const yargs = require("yargs");
@@ -92,46 +92,51 @@ function startServer() {
   const app = express();
   const port = process.env.PORT || 3000;
 
-  // 1. BODY PARSERS FIRST (CRITICAL: Runs before CORS)
+  // Middleware setup
   app.use(bodyParser.json());
   app.use(express.json());
 
-  // --- ULTIMATE CORS FIX START ---
-  // This setting forces Express to allow all origins, bypassing conflicts with Render's internal proxy.
-  app.use(cors({
-    origin: "*", // Allow ALL domains 
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    credentials: true,
-    optionsSuccessStatus: 204 // Use 204 for a clean OPTIONS preflight success
-  }));
-
-  // Define a list for Socket.IO that includes the explicit Amplify domain, 
-  // as Socket.IO sometimes needs a defined list even when Express is permissive.
-  const socketIoOrigins = [
+  // ✅ --- FIXED CORS CONFIGURATION ---
+  const allowedOrigins = [
     "http://localhost:5173",
-    process.env.CORS_ORIGIN, // https://main.d2amjrt77shbml.amplifyapp.com
-    "https://codetrack-backend-aws.onrender.com"
-  ].filter(Boolean);
-  // --- ULTIMATE CORS FIX END ---
+    "https://main.d2amjrt77shbml.amplifyapp.com",
+  ];
 
+  app.use(
+    cors({
+      origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          console.log("❌ CORS blocked for origin:", origin);
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+      credentials: true,
+      methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    })
+  );
+  // ✅ --- END CORS CONFIGURATION ---
+
+  // Connect to MongoDB
   const mongoURI = process.env.MONGODB_URI;
-
   mongoose
     .connect(mongoURI)
     .then(() => console.log("✅ MongoDB connected!"))
-    .catch((err) => console.error("❌ Unable to connect : ", err));
+    .catch((err) => console.error("❌ Unable to connect:", err));
 
-  // FIX 2: Use the main router for all API routes
-  // This will automatically handle /api/repo, /api/user, and /api/search
+  // Use main router for all APIs
   app.use("/api", mainRouter);
 
+  // Setup HTTP + Socket.IO server
   const httpServer = http.createServer(app);
+
   const io = new Server(httpServer, {
     cors: {
-      // Use the defined list for Socket.IO
-      origin: socketIoOrigins,
+      origin: allowedOrigins,
       methods: ["GET", "POST"],
-      credentials: true
+      credentials: true,
     },
   });
 
