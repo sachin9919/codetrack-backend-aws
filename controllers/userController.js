@@ -312,9 +312,21 @@ async function getStarredRepos(req, res) {
 
 // --- GET CONTRIBUTION DATA FOR HEAT MAP (CORRECTED) ---
 async function getContributionData(req, res) {
-  let profileUserId = req.params.id; // Use let
+  let profileUserId = req.params.id;
 
-  // --- ID Parsing/Validation (omitted logging) ---
+  // --- CORRECTION: Read timezoneOffset from query ---
+  // The frontend sends this, e.g., -330 (for India)
+  const timezoneOffsetMinutes = parseInt(req.query.timezoneOffset, 10) || 0;
+
+  // Convert offset from minutes to milliseconds
+  // The 'getTimezoneOffset()' method returns a POSITIVE value for timezones BEHIND UTC (like -05:00)
+  // and a NEGATIVE value for timezones AHEAD of UTC (like +05:30).
+  // So, a -330 from India (UTC+5:30) means we need to ADD 330 minutes.
+  // We must MULTIPLY by -1 to get the correct milliseconds to add.
+  const offsetMilliseconds = timezoneOffsetMinutes * 60 * 1000 * -1;
+  // ----------------------------------------------------
+
+  // --- ID Parsing/Validation ---
   if (profileUserId && profileUserId.startsWith(':')) {
     profileUserId = profileUserId.substring(1);
   }
@@ -329,7 +341,6 @@ async function getContributionData(req, res) {
     return res.status(400).json({ message: "Invalid user ID format during conversion." });
   }
 
-
   try {
     const contributions = await Repository.aggregate([
       // 1. Deconstruct the 'content' (commits) array
@@ -338,20 +349,21 @@ async function getContributionData(req, res) {
       // 2. Find all commits where the author matches the user ID
       { $match: { "content.author": userId } },
 
-      // *** CRITICAL FIX: Shift the UTC date to local IST time before converting to string ***
+      // --- CORRECTION: Use the DYNAMIC offset ---
       {
         $addFields: {
-          // Add 5 hours and 30 minutes (5.5 * 60 * 60 * 1000 milliseconds) to the UTC timestamp
+          // Add the calculated offset (which could be positive or negative)
           localTimestamp: {
             $add: [
               "$content.timestamp",
-              19800000 // 5 hours 30 minutes in milliseconds
+              offsetMilliseconds // Use the dynamic offset here
             ]
           }
         }
       },
+      // ----------------------------------------
 
-      // 3. Project the locally corrected timestamp into a YYYY-MM-DD date string (in UTC format now)
+      // 3. Project the locally corrected timestamp into a YYYY-MM-DD date string
       {
         $project: {
           _id: 0,
@@ -359,11 +371,10 @@ async function getContributionData(req, res) {
             $dateToString: {
               format: "%Y-%m-%d",
               date: "$localTimestamp", // Use the new localTimestamp field
-              // We no longer need the 'timezone' field here since the time is already corrected
             }
           }
         }
-      }, // <<<--- COMMA IS HERE
+      },
 
       // 4. Group all commits by that date string and count them
       {
@@ -385,12 +396,12 @@ async function getContributionData(req, res) {
       // 6. Sort by date (good practice)
       { $sort: { "date": 1 } }
     ]);
-    console.log(`DEBUG: Aggregation finished. Found ${contributions.length} contribution days.`); // Log result count
+    console.log(`DEBUG: Aggregation finished. Found ${contributions.length} contribution days.`);
 
     res.json(contributions);
 
   } catch (err) {
-    console.error("Error fetching contribution data during aggregation: ", err.message); // More specific error log
+    console.error("Error fetching contribution data during aggregation: ", err.message);
     res.status(500).json({ error: "Server error fetching contribution data." });
   }
 }
