@@ -99,8 +99,13 @@ function startServer() {
   // ✅ --- FIXED CORS CONFIGURATION ---
   const allowedOrigins = [
     "http://localhost:5173",
-    "https://main.d2amjrt77shbml.amplifyapp.com",
+    "https://main.d2amjrt7shbml.amplifyapp.com",
+    "https://codetrack-two.vercel.app",
+    "https://codetrack-git-main-sachin-mishras-projects-f82d7fad.vercel.app"
   ];
+
+ 
+
 
   app.use(
     cors({
